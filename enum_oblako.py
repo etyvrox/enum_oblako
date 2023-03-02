@@ -18,6 +18,7 @@ bucket_urls = [
         'https://storage.cloud.croc.ru/bucketname',             # croc
         'https://bucketname.selcdn.ru',                         # selectel_s3
 ]
+
 namespaces_urls = [
         'https://namespace.s3mts.ru/bucketname',                # mts_s3
         'https://namespace.s3pd01.sbercloud.ru/bucketname',     # sber_s3
@@ -26,6 +27,7 @@ namespaces_urls = [
         'https://namespace.s3pd12.sbercloud.ru/bucketname',     # sber_s3
         'https://namespace.s3pdgeob.sbercloud.ru/bucketname',   # sber_s3
 ]
+
 saas_urls = [
             'https://name.gitlab.yandexcloud.net',    # yandex gitlab
             'https://name.website.yandexcloud.net',   # yandex website
@@ -69,12 +71,12 @@ def cloudrec(name, generate, namespaces, buckets, rps):
 
 
 def print_stats():
-    print(f"[*] Enumerating for name {conf['name']}")
-    print(f"[*] Buckets' filename {conf['buckets']}")
-    print(f"[*] Namespaces' filename {conf['namespaces']}")
-    print(f"[*] Timeout is {conf['timeout']}")
-    print(f"[*] Requests per second is {conf['rps']}")
-    print(f"[*] Total list length is {len(url_list)}")
+    print(f"[*] Enumerating for name: {conf['name']}")
+    print(f"[*] Buckets filename: {conf['buckets']}")
+    print(f"[*] Namespaces filename: {conf['namespaces']}")
+    print(f"[*] Timeout: {conf['timeout']}")
+    print(f"[*] Requests per second: {conf['rps']}")
+    print(f"[*] Total list length: {len(url_list)}")
 
 
 async def get(client, url):
@@ -162,7 +164,7 @@ async def brute():
     async with httpx.AsyncClient(verify=False, limits=limits, timeout=conf['timeout'], follow_redirects=True) as client:
         for url in url_list:
             tasks.append(asyncio.ensure_future(get(client, url)))
-        
+
         res = await asyncio.gather(*tasks, return_exceptions=True)
 
 
