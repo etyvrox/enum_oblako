@@ -7,10 +7,9 @@ from itertools import product
 
 start_time = time.time()
 script_path = os.path.dirname(os.path.abspath(__file__))
-url_list = []
 url_list_results = list()
 
-# Urls with both bucket names only
+# Urls with bucket names only
 BUCKET_URLS = [
     'https://storage.yandexcloud.net/{bucketname}',             # yandex
     'https://{bucketname}.hb.bizmrg.com',                       # vk_s3
@@ -41,9 +40,7 @@ SAAS_URLS = [
 ]
 
 
-def read_payload_file(file_path):
-    """ Reads a file and returns a list of strings
-    """
+def read_payload_file(file_path: str) -> list[str]:
     with open(file_path) as file_obj:
         return [line.strip() for line in file_obj.readlines()]
 
@@ -57,28 +54,38 @@ def read_payload_file(file_path):
               default=os.path.join(script_path, 'bucketnames.txt'))
 @click.option('--rps', '-rps', help='Enter number of requests per second to init', type=int, default=100)
 def cloudrec(name, generate, namespaces, buckets, rps):
-    if generate:
-        gen(name, namespaces, buckets)
-    else:
-        enum(name, namespaces, buckets)
 
-    prepare_url_list()
+    namespaces_paload = read_payload_file(namespaces)
+    bucketnames_payload = read_payload_file(buckets)
+
+    if generate:
+        mutations = generate_mutations(name, namespaces_paload)
+        s3_bucket_namespace_payload = mutations
+    else:
+        mutations = [name]
+        s3_bucket_namespace_payload = namespaces_paload
+
+    enum_urls = generate_enum_payload(saas_payload=mutations, buckets_payload=bucketnames_payload,
+                                      s3_buckets_payload=s3_bucket_namespace_payload)
+
+    enum_urls.sort()
+    enum_urls = list(set(enum_urls))
 
     timeout = 200 * round(100 / rps, 2)
-    print_stats(name, namespaces, buckets, timeout, rps)
-    asyncio.run(brute(rps, timeout))
+    print_stats(name, namespaces, buckets, timeout, rps, enum_urls)
+    asyncio.run(brute(enum_urls, rps, timeout))
 
     print(f"Time elapsed: {str(time.time() - start_time)}")
     print(f'Fund {len(url_list_results)} results')
 
 
-def print_stats(name, namespaces, buckets, timeout, rps):
+def print_stats(name, namespaces, buckets, timeout, rps, enum_urls):
     print(f"[*] Enumerating for name: {name}")
     print(f"[*] Buckets filename: {buckets}")
     print(f"[*] Namespaces filename: {namespaces}")
     print(f"[*] Timeout: {timeout}")
     print(f"[*] Requests per second: {rps}")
-    print(f"[*] Total list length: {len(url_list)}")
+    print(f"[*] Total list length: {len(enum_urls)}")
 
 
 async def get(client, url):
@@ -93,85 +100,65 @@ async def get(client, url):
         pass
 
 
-def add(url):
-    global url_list
-    url_list.append(url)
-
-
-def prepare_url_list():
-    global url_list
-    url_list.sort()
-    url_list = list(set(url_list))
-
-
-def generate_mutations(company_name, mutation_payload_file):
+def generate_mutations(company_name: str, mutation_payload: list[str]) -> list[str]:
     mutations = [company_name]
 
-    for mutation in read_payload_file(mutation_payload_file):
+    for mutation in mutation_payload:
         mutations.append(f"{mutation}-{company_name}")
         mutations.append(f"{company_name}-{mutation}")
     return mutations
 
 
-def gen(name, namespaces, buckets):
-    mutations = generate_mutations(name, namespaces)
-
-    enum_saas(mutations)
-    enum_buckets(mutations)
-    enum_buckets_with_namespaces(mutations, buckets)
-
-
-def enum(name, namespaces, buckets):
-    temp = [name]
-    enum_saas(temp)
-    enum_s3(temp, namespaces, buckets)
+def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s3_buckets_payload: list[str]) -> list[str]:
+    """
+    @param saas_payload: a list of strings for SAAS_URLS
+    @param buckets_payload: a list of strings for BUCKET_URLS
+    @param s3_buckets_payload: a list of strings for 'namespace' in NAMESPACES_URLS
+    @return:
+    """
+    return enum_saas(saas_payload) + enum_buckets(buckets_payload) + s3_buckets_payload
 
 
-def enum_s3(name, namespaces, buckets):
-    temp_list = []
-
-    for namespace in read_payload_file(namespaces):
-        for url in NAMESPACES_URLS:
-            temp_list.append(url.replace('namespace', namespace))
-
-    bucketnames = read_payload_file(buckets) + name
-
-    for bucket in bucketnames:
-        for url in BUCKET_URLS + temp_list:
-            add(url.replace('bucketname', bucket))
-
-
-def enum_saas(mutations):
-    for url in SAAS_URLS:
-        for generated_saas_url in [url.format(name=mutation) for mutation in mutations]:
-            add(generated_saas_url)
+def fill_template(template_urls: list[str], mutations: list[str], field_name: str) -> list[str]:
+    """ Fills template urls.
+    @param template_urls: a list of urls, e.g.
+        [ 'https://{bucketname}.hb.bizmrg.com', ... ]
+    @param mutations: a list of strings to be substituted in the urls
+    @param field_name: a string to be replaced, e.g. `bucketname`
+    @return: list of urls with ...
+    """
+    urls = []
+    for tmp_url in template_urls:
+        urls += [tmp_url.format(**{field_name: mutation}) for mutation in mutations]
+    return urls
 
 
-def enum_buckets(mutations):
-    for url in BUCKET_URLS:
-        for generated_bucket_url in [url.format(bucketname=mutation) for mutation in mutations]:
-            add(generated_bucket_url)
+def enum_saas(mutations: list[str]) -> list[str]:
+    return fill_template(template_urls=SAAS_URLS, mutations=mutations, field_name='name')
 
 
-def enum_buckets_with_namespaces(mutations, buckets_file_path):
+def enum_buckets(mutations: list[str]) -> list[str]:
+    return fill_template(template_urls=BUCKET_URLS, mutations=mutations, field_name='bucketname')
+
+
+def enum_buckets_with_namespaces(mutations: list[str], bucketnames: list[str]) -> list[str]:
     """
     MTS Cloud S3: http(s)://{namespace}.s3mts.ru/{bucket}/file/
     SberCloud S3: https://{namespace}.s3pd02.sbercloud.ru/{bucket}
     """
-    with open(buckets_file_path) as buckets_f:
-        bucketnames = [line.strip() for line in buckets_f.readlines()]
-
+    generated_urls = []
     for url in NAMESPACES_URLS:
         for pair in [(ns, bucket) for ns, bucket in product(mutations, bucketnames)]:
-            add(url.format(namespace=pair[0], bucketname=pair[1]))
+            generated_urls.append(url.format(namespace=pair[0], bucketname=pair[1]))
+    return generated_urls
 
 
-async def brute(rps, timeout):
+async def brute(enum_urls, rps, timeout):
     limits = httpx.Limits(max_connections=rps)
     tasks = []
 
     async with httpx.AsyncClient(verify=False, limits=limits, timeout=timeout, follow_redirects=True) as client:
-        for url in url_list:
+        for url in enum_urls:
             tasks.append(asyncio.ensure_future(get(client, url)))
 
         res = await asyncio.gather(*tasks, return_exceptions=True)
