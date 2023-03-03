@@ -7,7 +7,6 @@ from itertools import product
 
 start_time = time.time()
 script_path = os.path.dirname(os.path.abspath(__file__))
-conf = {}
 url_list = []
 url_list_results = list()
 
@@ -43,8 +42,7 @@ SAAS_URLS = [
 
 
 def read_payload_file(file_path):
-    """
-    Reads a file and returns a list of strings
+    """ Reads a file and returns a list of strings
     """
     with open(file_path) as file_obj:
         return [line.strip() for line in file_obj.readlines()]
@@ -59,37 +57,27 @@ def read_payload_file(file_path):
               default=os.path.join(script_path, 'bucketnames.txt'))
 @click.option('--rps', '-rps', help='Enter number of requests per second to init', type=int, default=100)
 def cloudrec(name, generate, namespaces, buckets, rps):
-    global conf
-
-    conf = {
-        'name': name,
-        'namespaces': namespaces,
-        'buckets': buckets,
-        'rps': rps
-    }
-
-    conf['timeout'] = 200 * round(100 / conf['rps'], 2)
-
     if generate:
-        gen(name)
+        gen(name, namespaces, buckets)
     else:
         enum(name, namespaces, buckets)
 
     prepare_url_list()
 
-    print_stats()
-    asyncio.run(brute())
+    timeout = 200 * round(100 / rps, 2)
+    print_stats(name, namespaces, buckets, timeout, rps)
+    asyncio.run(brute(rps, timeout))
 
     print(f"Time elapsed: {str(time.time() - start_time)}")
     print(f'Fund {len(url_list_results)} results')
 
 
-def print_stats():
-    print(f"[*] Enumerating for name: {conf['name']}")
-    print(f"[*] Buckets filename: {conf['buckets']}")
-    print(f"[*] Namespaces filename: {conf['namespaces']}")
-    print(f"[*] Timeout: {conf['timeout']}")
-    print(f"[*] Requests per second: {conf['rps']}")
+def print_stats(name, namespaces, buckets, timeout, rps):
+    print(f"[*] Enumerating for name: {name}")
+    print(f"[*] Buckets filename: {buckets}")
+    print(f"[*] Namespaces filename: {namespaces}")
+    print(f"[*] Timeout: {timeout}")
+    print(f"[*] Requests per second: {rps}")
     print(f"[*] Total list length: {len(url_list)}")
 
 
@@ -116,21 +104,21 @@ def prepare_url_list():
     url_list = list(set(url_list))
 
 
-def generate_mutations(company_name):
+def generate_mutations(company_name, mutation_payload_file):
     mutations = [company_name]
 
-    for mutation in read_payload_file(conf['namespaces']):
+    for mutation in read_payload_file(mutation_payload_file):
         mutations.append(f"{mutation}-{company_name}")
         mutations.append(f"{company_name}-{mutation}")
     return mutations
 
 
-def gen(name):
-    mutations = generate_mutations(name)
+def gen(name, namespaces, buckets):
+    mutations = generate_mutations(name, namespaces)
 
     enum_saas(mutations)
     enum_buckets(mutations)
-    enum_buckets_with_namespaces(mutations, conf['buckets'])
+    enum_buckets_with_namespaces(mutations, buckets)
 
 
 def enum(name, namespaces, buckets):
@@ -178,11 +166,11 @@ def enum_buckets_with_namespaces(mutations, buckets_file_path):
             add(url.format(namespace=pair[0], bucketname=pair[1]))
 
 
-async def brute():
-    limits = httpx.Limits(max_connections=conf['rps'])
+async def brute(rps, timeout):
+    limits = httpx.Limits(max_connections=rps)
     tasks = []
 
-    async with httpx.AsyncClient(verify=False, limits=limits, timeout=conf['timeout'], follow_redirects=True) as client:
+    async with httpx.AsyncClient(verify=False, limits=limits, timeout=timeout, follow_redirects=True) as client:
         for url in url_list:
             tasks.append(asyncio.ensure_future(get(client, url)))
 
