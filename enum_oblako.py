@@ -11,7 +11,8 @@ conf = {}
 url_list = []
 url_list_results = list()
 
-bucket_urls = [
+# Urls with both bucket names only
+BUCKET_URLS = [
     'https://storage.yandexcloud.net/{bucketname}',             # yandex
     'https://{bucketname}.hb.bizmrg.com',                       # vk_s3
     'https://{bucketname}.ib.bizmrg.com',                       # vk_s3
@@ -19,7 +20,8 @@ bucket_urls = [
     'https://{bucketname}.selcdn.ru',                           # selectel_s3
 ]
 
-namespaces_urls = [
+# Urls with both bucket name and namespace mutable
+NAMESPACES_URLS = [
     'https://{namespace}.s3mts.ru/{bucketname}',                # mts_s3
     'https://{namespace}.s3pd01.sbercloud.ru/{bucketname}',     # sber_s3
     'https://{namespace}.s3pd02.sbercloud.ru/{bucketname}',     # sber_s3
@@ -28,7 +30,9 @@ namespaces_urls = [
     'https://{namespace}.s3pdgeob.sbercloud.ru/{bucketname}',   # sber_s3
 ]
 
-saas_urls = [
+# Urls where we expect to see the company domain name to be in somehow
+# e.g. `mycompany.slack.com`, `dev-mycompany-internal.gitlab.yandexcloud.net`
+SAAS_URLS = [
     'https://{name}.gitlab.yandexcloud.net',                    # yandex gitlab
     'https://{name}.website.yandexcloud.net',                   # yandex website
     'https://{name}.slack.com',                                 # slack
@@ -139,37 +143,37 @@ def enum_s3(name, namespaces, buckets):
     temp_list = []
 
     for namespace in read_payload_file(namespaces):
-        for url in namespaces_urls:
+        for url in NAMESPACES_URLS:
             temp_list.append(url.replace('namespace', namespace))
 
     bucketnames = read_payload_file(buckets) + name
 
     for bucket in bucketnames:
-        for url in bucket_urls + temp_list:
+        for url in BUCKET_URLS + temp_list:
             add(url.replace('bucketname', bucket))
 
 
 def enum_saas(mutations):
-    for url in saas_urls:
+    for url in SAAS_URLS:
         for generated_saas_url in [url.format(name=mutation) for mutation in mutations]:
             add(generated_saas_url)
 
 
 def enum_buckets(mutations):
-    for url in bucket_urls:
+    for url in BUCKET_URLS:
         for generated_bucket_url in [url.format(bucketname=mutation) for mutation in mutations]:
             add(generated_bucket_url)
 
 
 def enum_buckets_with_namespaces(mutations, buckets_file_path):
     """
-    MTS Cloud S3: http(s)://NAMESPACE.s3mts.ru/BUCKET/file/
-    SberCloud S3: https://NAMESPACE.ZONE.sbercloud.ru/BUCKETNAME
+    MTS Cloud S3: http(s)://{namespace}.s3mts.ru/{bucket}/file/
+    SberCloud S3: https://{namespace}.s3pd02.sbercloud.ru/{bucket}
     """
     with open(buckets_file_path) as buckets_f:
         bucketnames = [line.strip() for line in buckets_f.readlines()]
 
-    for url in namespaces_urls:
+    for url in NAMESPACES_URLS:
         for pair in [(ns, bucket) for ns, bucket in product(mutations, bucketnames)]:
             add(url.format(namespace=pair[0], bucketname=pair[1]))
 
