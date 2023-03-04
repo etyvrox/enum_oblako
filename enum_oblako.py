@@ -67,18 +67,21 @@ def debugger_counter(f):
 @click.option('--rps', '-rps', help='Enter number of requests per second to init', type=int, default=100)
 def cloudrec(name, generate, namespaces, buckets, rps):
 
-    namespaces_paload = read_payload_file(namespaces)
-    bucketnames_payload = read_payload_file(buckets)
+    namespaces_data = read_payload_file(namespaces)
+    bucketnames_data = read_payload_file(buckets)
 
     if generate:
-        mutations = generate_mutations(name, namespaces_paload)
-        s3_bucket_namespace_payload = mutations
+        mutations = generate_mutations(name, namespaces_data)
+
+        bucketnames_payload = mutations
+        s3_namespace_payload = mutations
     else:
         mutations = [name]
-        s3_bucket_namespace_payload = namespaces_paload
+        bucketnames_payload = bucketnames_data
+        s3_namespace_payload = namespaces_data
 
     enum_urls = generate_enum_payload(saas_payload=mutations, buckets_payload=bucketnames_payload,
-                                      s3_buckets_payload=s3_bucket_namespace_payload)
+                                      s3_buckets_payload=(s3_namespace_payload, bucketnames_data))
 
     enum_urls.sort()
     enum_urls = list(set(enum_urls))
@@ -122,7 +125,7 @@ def generate_mutations(company_name: str, mutation_payload: list[str]) -> list[s
     return mutations
 
 
-def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s3_buckets_payload: list[str]) -> list[str]:
+def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s3_buckets_payload: tuple[list[str], list[str]]) -> list[str]:
     """
     @param saas_payload: a list of strings for SAAS_URLS
     @param buckets_payload: a list of strings for BUCKET_URLS
@@ -130,7 +133,7 @@ def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s
     @return:
     """
     return enum_saas(saas_payload) + enum_buckets(buckets_payload) + \
-        enum_buckets_with_namespaces(s3_buckets_payload, buckets_payload)
+        enum_buckets_with_namespaces(s3_buckets_payload[0], s3_buckets_payload[1])
 
 
 def fill_template(template_urls: list[str], mutations: list[str], field_name: str) -> list[str]:
