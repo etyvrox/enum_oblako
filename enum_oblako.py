@@ -9,7 +9,6 @@ start_time = time.time()
 script_path = os.path.dirname(os.path.abspath(__file__))
 url_list_results = list()
 
-# Urls with bucket names only
 BUCKET_URLS = [
     'https://storage.yandexcloud.net/{bucketname}',             # yandex
     'https://{bucketname}.hb.bizmrg.com',                       # vk_s3
@@ -18,7 +17,6 @@ BUCKET_URLS = [
     'https://{bucketname}.selcdn.ru',                           # selectel_s3
 ]
 
-# Urls with both bucket name and namespace mutable
 NAMESPACES_URLS = [
     'https://{namespace}.s3mts.ru/{bucketname}',                # mts_s3
     'https://{namespace}.s3pd01.sbercloud.ru/{bucketname}',     # sber_s3
