@@ -45,6 +45,18 @@ def read_payload_file(file_path: str) -> list[str]:
         return [line.strip() for line in file_obj.readlines()]
 
 
+def debugger_counter(f):
+    def inner(*args, **kwargs):
+        results = f(*args, **kwargs)
+        print(f'{f.__name__} returned {len(results)} results. Saving them in {f.__name__}.txt')
+        with open(f'tests/{f.__name__}.txt', 'w') as o:
+            results_to_save = [f'{x}\n' for x in results]
+            results_to_save.sort()
+            o.writelines(results_to_save)
+        return results
+    return inner
+
+
 @click.command()
 @click.option('--name', '-n', help='Enter company\'s name', default='')
 @click.option('--generate', help='Let cloudrecon generate all for you', type=bool, is_flag=True, default=False)
@@ -100,6 +112,7 @@ async def get(client, url):
         pass
 
 
+@debugger_counter
 def generate_mutations(company_name: str, mutation_payload: list[str]) -> list[str]:
     mutations = [company_name]
 
@@ -116,7 +129,8 @@ def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s
     @param s3_buckets_payload: a list of strings for 'namespace' in NAMESPACES_URLS
     @return:
     """
-    return enum_saas(saas_payload) + enum_buckets(buckets_payload) + s3_buckets_payload
+    return enum_saas(saas_payload) + enum_buckets(buckets_payload) + \
+        enum_buckets_with_namespaces(s3_buckets_payload, buckets_payload)
 
 
 def fill_template(template_urls: list[str], mutations: list[str], field_name: str) -> list[str]:
@@ -133,14 +147,17 @@ def fill_template(template_urls: list[str], mutations: list[str], field_name: st
     return urls
 
 
+@debugger_counter
 def enum_saas(mutations: list[str]) -> list[str]:
     return fill_template(template_urls=SAAS_URLS, mutations=mutations, field_name='name')
 
 
+@debugger_counter
 def enum_buckets(mutations: list[str]) -> list[str]:
     return fill_template(template_urls=BUCKET_URLS, mutations=mutations, field_name='bucketname')
 
 
+@debugger_counter
 def enum_buckets_with_namespaces(mutations: list[str], bucketnames: list[str]) -> list[str]:
     """
     MTS Cloud S3: http(s)://{namespace}.s3mts.ru/{bucket}/file/
