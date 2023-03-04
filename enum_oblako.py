@@ -72,16 +72,13 @@ def cloudrec(name, generate, namespaces, buckets, rps):
 
     if generate:
         mutations = generate_mutations(name, namespaces_data)
-
-        bucketnames_payload = mutations
-        s3_namespace_payload = mutations
+        enum_urls = generate_enum_payload(saas_payload=mutations,
+                                          buckets_payload=mutations,
+                                          s3_buckets_payload=(mutations, bucketnames_data))
     else:
-        mutations = [name]
-        bucketnames_payload = bucketnames_data
-        s3_namespace_payload = namespaces_data
-
-    enum_urls = generate_enum_payload(saas_payload=mutations, buckets_payload=bucketnames_payload,
-                                      s3_buckets_payload=(s3_namespace_payload, bucketnames_data))
+        enum_urls = generate_enum_payload(saas_payload=[name],
+                                          buckets_payload=bucketnames_data,
+                                          s3_buckets_payload=(namespaces_data, bucketnames_data))
 
     enum_urls.sort()
     enum_urls = list(set(enum_urls))
