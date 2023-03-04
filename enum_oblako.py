@@ -42,18 +42,12 @@ SAAS_URLS = [
 
 def read_payload_file(file_path: str) -> list[str]:
     with open(file_path) as file_obj:
-        return [line.strip() for line in file_obj.readlines()]
+        return [line.strip() for line in file_obj.readlines() if line]
 
 
-def debugger_counter(f):
+def uniq(func):
     def inner(*args, **kwargs):
-        results = f(*args, **kwargs)
-        print(f'{f.__name__} returned {len(results)} results. Saving them in {f.__name__}.txt')
-        with open(f'tests/{f.__name__}.txt', 'w') as o:
-            results_to_save = [f'{x}\n' for x in results]
-            results_to_save.sort()
-            o.writelines(results_to_save)
-        return results
+        return list(set(func(*args, **kwargs)))
     return inner
 
 
@@ -79,9 +73,6 @@ def cloudrec(name, generate, namespaces, buckets, rps):
         enum_urls = generate_enum_payload(saas_payload=[name],
                                           buckets_payload=bucketnames_data,
                                           s3_buckets_payload=(namespaces_data, bucketnames_data))
-
-    enum_urls.sort()
-    enum_urls = list(set(enum_urls))
 
     timeout = 200 * round(100 / rps, 2)
     print_stats(name, namespaces, buckets, timeout, rps, enum_urls)
@@ -112,13 +103,14 @@ async def get(client, url):
         pass
 
 
-@debugger_counter
+@uniq
 def generate_mutations(company_name: str, mutation_payload: list[str]) -> list[str]:
     mutations = [company_name]
 
     for mutation in mutation_payload:
         mutations.append(f"{mutation}-{company_name}")
         mutations.append(f"{company_name}-{mutation}")
+
     return mutations
 
 
@@ -129,10 +121,13 @@ def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s
     @param s3_buckets_payload: a list of strings for 'namespace' in NAMESPACES_URLS
     @return:
     """
-    return enum_saas(saas_payload) + enum_buckets(buckets_payload) + \
+    urls = enum_saas(saas_payload) + enum_buckets(buckets_payload) + \
         enum_buckets_with_namespaces(s3_buckets_payload[0], s3_buckets_payload[1])
+    urls.sort()
+    return urls
 
 
+@uniq
 def fill_template(template_urls: list[str], mutations: list[str], field_name: str) -> list[str]:
     """ Fills template urls.
     @param template_urls: a list of urls, e.g.
@@ -147,17 +142,15 @@ def fill_template(template_urls: list[str], mutations: list[str], field_name: st
     return urls
 
 
-@debugger_counter
 def enum_saas(mutations: list[str]) -> list[str]:
     return fill_template(template_urls=SAAS_URLS, mutations=mutations, field_name='name')
 
 
-@debugger_counter
 def enum_buckets(mutations: list[str]) -> list[str]:
     return fill_template(template_urls=BUCKET_URLS, mutations=mutations, field_name='bucketname')
 
 
-@debugger_counter
+@uniq
 def enum_buckets_with_namespaces(mutations: list[str], bucketnames: list[str]) -> list[str]:
     """
     MTS Cloud S3: http(s)://{namespace}.s3mts.ru/{bucket}/file/
