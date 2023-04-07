@@ -1,47 +1,22 @@
 import click
 import os
 import time
-import httpx
 import asyncio
 from itertools import product
+from config import *
+import aiohttp
 
 start_time = time.time()
 script_path = os.path.dirname(os.path.abspath(__file__))
 url_list_results = list()
 
-BUCKET_URLS = [
-    'https://storage.yandexcloud.net/{bucketname}',             # yandex
-    'https://{bucketname}.hb.bizmrg.com',                       # vk_s3
-    'https://{bucketname}.ib.bizmrg.com',                       # vk_s3
-    'https://storage.cloud.croc.ru/{bucketname}',               # croc
-    'https://{bucketname}.selcdn.ru',                           # selectel_s3
-]
+SAAS_URLS = GL
+BUCKET_URLS = []
+NAMESPACES_URLS = []
 
-NAMESPACES_URLS = [
-    'https://{namespace}.s3mts.ru/{bucketname}',                # mts_s3
-    'https://{namespace}.s3pd01.sbercloud.ru/{bucketname}',     # sber_s3
-    'https://{namespace}.s3pd02.sbercloud.ru/{bucketname}',     # sber_s3
-    'https://{namespace}.s3pd11.sbercloud.ru/{bucketname}',     # sber_s3
-    'https://{namespace}.s3pd12.sbercloud.ru/{bucketname}',     # sber_s3
-    'https://{namespace}.s3pdgeob.sbercloud.ru/{bucketname}',   # sber_s3
-]
-
-# Urls where we expect to see the company domain name to be in somehow
-# e.g. `mycompany.slack.com`, `dev-mycompany-internal.gitlab.yandexcloud.net`
-SAAS_URLS = [
-    'https://{name}.gitlab.yandexcloud.net',                    # yandex gitlab
-    'https://{name}.website.yandexcloud.net',                   # yandex website
-    'https://{name}.slack.com',                                 # slack
-    'https://{name}.atlassian.net/login.jsp',                   # atlassian
-    'https://{name}.my.salesforce.com',                         # salesforce
-    # 'https://name.zendesk.com'                                # zendesk
-]
-
-
-def read_payload_file(file_path: str) -> list[str]:
+def read_payload_file(file_path: str) -> Generator[str]:
     with open(file_path) as file_obj:
-        return [line.strip() for line in file_obj.readlines() if line]
-
+        return (line.strip() for line in file_obj.readlines() if line)
 
 def uniq(func):
     def inner(*args, **kwargs):
@@ -57,48 +32,66 @@ def uniq(func):
 @click.option('--buckets', type=click.Path(exists=True), help='File with generated bucket names',
               default=os.path.join(script_path, 'bucketnames.txt'))
 @click.option('--rps', '-rps', help='Enter number of requests per second to init', type=int, default=100)
-def cloudrec(name, generate, namespaces, buckets, rps):
+@click.option('--region', '-r', help='Enter region in which to search (all, ru, eu, apac, mea) Default: all', type=str, default='all')
+def cloudrec(name, generate, namespaces, buckets, rps, region):
 
     namespaces_data = read_payload_file(namespaces)
     bucketnames_data = read_payload_file(buckets)
+    global BUCKET_URLS, NAMESPACES_URLS, SAAS_URLS
+
+    if (region == 'eu'):
+        BUCKET_URLS += EU_BUCKET_URLS
+    elif (region == 'ru'):
+        BUCKET_URLS += RU_BUCKET_URLS
+        NAMESPACES_URLS += RU_NAMESPACES_URLS
+        SAAS_URLS += RU_SAAS_URLS
+    elif (region == 'all'):
+        BUCKET_URLS += EU_BUCKET_URLS + RU_BUCKET_URLS
+        NAMESPACES_URLS += RU_NAMESPACES_URLS
+        SAAS_URLS += RU_SAAS_URLS
 
     if generate:
         mutations = generate_mutations(name, namespaces_data)
-        enum_urls = generate_enum_payload(saas_payload=mutations,
-                                          buckets_payload=mutations,
-                                          s3_buckets_payload=(mutations, bucketnames_data))
+        gen = generate_enum_payload_chunk(saas_payload=mutations,
+                              buckets_payload=mutations,
+                              s3_buckets_payload=(mutations, bucketnames_data))
     else:
-        enum_urls = generate_enum_payload(saas_payload=[name],
-                                          buckets_payload=bucketnames_data,
-                                          s3_buckets_payload=(namespaces_data, bucketnames_data))
+        gen = generate_enum_payload_chunk(saas_payload=[name],
+                              buckets_payload=bucketnames_data,
+                              s3_buckets_payload=(namespaces_data, bucketnames_data))
 
-    timeout = 200 * round(100 / rps, 2)
-    print_stats(name, namespaces, buckets, timeout, rps, enum_urls)
-    asyncio.run(brute(enum_urls, rps, timeout))
+    print_stats(name, namespaces, buckets, rps)
+
+    asyncio.run(brute(gen, rps))
 
     print(f"Time elapsed: {str(time.time() - start_time)}")
-    print(f'Fund {len(url_list_results)} results')
+    print(f'Found {len(url_list_results)} results')
 
 
-def print_stats(name, namespaces, buckets, timeout, rps, enum_urls):
+def print_stats(name, namespaces, buckets, rps):
     print(f"[*] Enumerating for name: {name}")
     print(f"[*] Buckets filename: {buckets}")
     print(f"[*] Namespaces filename: {namespaces}")
-    print(f"[*] Timeout: {timeout}")
     print(f"[*] Requests per second: {rps}")
-    print(f"[*] Total list length: {len(enum_urls)}")
 
 
-async def get(client, url):
+async def get(client, queue):
     failed_http_codes = [404, 434, 400]
-
-    try:
-        resp = await client.get(url)
-        if resp.status_code not in failed_http_codes:
-            url_list_results.append({'url': url, 'code': resp.status_code})
-            print(f"[+] Found - {url} : {str(resp.status_code)}")
-    except Exception:
-        pass
+    while True: 
+        
+        url = await queue.get()
+        #print (' ' * 80, end='\r')
+        #print (f"Trying {url}", end="\r")
+        
+        try:
+            resp = await client.get(url, allow_redirects=True)
+            if resp.status not in failed_http_codes:
+                url_list_results.append({'url': url, 'code': resp.status})
+                print(f"[+] Found - {url} : {str(resp.status)}")
+        except Exception as ex:
+            pass
+        finally:
+            queue.task_done()
 
 
 @uniq
@@ -112,21 +105,27 @@ def generate_mutations(company_name: str, mutation_payload: list[str]) -> list[s
     return mutations
 
 
-def generate_enum_payload(saas_payload: list[str], buckets_payload: list[str], s3_buckets_payload: tuple[list[str], list[str]]) -> list[str]:
+def generate_enum_payload_chunk(saas_payload: list[str], buckets_payload: list[str], s3_buckets_payload: tuple[list[str], list[str]]) -> Generator[str,str,str]:
     """
     @param saas_payload: a list of strings for SAAS_URLS
     @param buckets_payload: a list of strings for BUCKET_URLS
     @param s3_buckets_payload: a list of strings for 'namespace' in NAMESPACES_URLS
     @return:
     """
-    urls = enum_saas(saas_payload) + enum_buckets(buckets_payload) + \
-        enum_buckets_with_namespaces(s3_buckets_payload[0], s3_buckets_payload[1])
-    urls.sort()
-    return urls
 
+    _enum_saas = enum_saas(saas_payload)
+    for res in _enum_saas:
+        yield res
+    
+    _enum_buckets = enum_buckets(buckets_payload)
+    for res in _enum_buckets:
+        yield res
+    
+    _enum_buckets_with_namespaces = enum_buckets_with_namespaces(s3_buckets_payload[0], s3_buckets_payload[1])
+    for res in _enum_buckets_with_namespaces:
+        yield res
 
-@uniq
-def fill_template(template_urls: list[str], mutations: list[str], field_name: str) -> list[str]:
+def fill_template(template_urls: list[str], mutations: list[str], field_name: str) -> Generator[str]:
     """ Fills template urls.
     @param template_urls: a list of urls, e.g.
         [ 'https://{bucketname}.hb.bizmrg.com', ... ]
@@ -134,10 +133,11 @@ def fill_template(template_urls: list[str], mutations: list[str], field_name: st
     @param field_name: a string to be replaced, e.g. `bucketname`
     @return: list of urls with ...
     """
-    urls = []
+
     for tmp_url in template_urls:
-        urls += [tmp_url.format(**{field_name: mutation}) for mutation in mutations]
-    return urls
+        for mutation in mutations:
+            yield tmp_url.format(**{field_name: mutation})
+    
 
 
 def enum_saas(mutations: list[str]) -> list[str]:
@@ -148,29 +148,37 @@ def enum_buckets(mutations: list[str]) -> list[str]:
     return fill_template(template_urls=BUCKET_URLS, mutations=mutations, field_name='bucketname')
 
 
-@uniq
 def enum_buckets_with_namespaces(mutations: list[str], bucketnames: list[str]) -> list[str]:
     """
     MTS Cloud S3: http(s)://{namespace}.s3mts.ru/{bucket}/file/
     SberCloud S3: https://{namespace}.s3pd02.sbercloud.ru/{bucket}
     """
-    generated_urls = []
+
     for url in NAMESPACES_URLS:
         for pair in [(ns, bucket) for ns, bucket in product(mutations, bucketnames)]:
-            generated_urls.append(url.format(namespace=pair[0], bucketname=pair[1]))
-    return generated_urls
+            yield url.format(namespace=pair[0], bucketname=pair[1])
+    
 
-
-async def brute(enum_urls, rps, timeout):
-    limits = httpx.Limits(max_connections=rps)
+async def brute(gen, rps):
     tasks = []
+    queue = asyncio.Queue(maxsize=1000)
+    connector = aiohttp.TCPConnector(limit=rps, ssl=False)
+    async with aiohttp.ClientSession(connector=connector) as sess:
+        for i in range(100):
+            task = asyncio.create_task(get(sess, queue))
+            tasks.append(task)
 
-    async with httpx.AsyncClient(verify=False, limits=limits, timeout=timeout, follow_redirects=True) as client:
-        for url in enum_urls:
-            tasks.append(asyncio.ensure_future(get(client, url)))
-
-        res = await asyncio.gather(*tasks, return_exceptions=True)
-
+        for url in gen:
+            await queue.put(url)
+            
+        await queue.join()
+        
+        for task in tasks:
+           task.cancel()
+        
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        await sess.close()
 
 if __name__ == '__main__':
     cloudrec()
