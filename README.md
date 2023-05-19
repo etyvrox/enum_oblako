@@ -26,15 +26,25 @@ Enum_oblako can be run in two modes:
 - Generate and enum (generate namespaces and bucketnames for you based on company's name)
 - Enum (run enumeration based on submitted namespaces' and buckets' files)
 
+# Install
+
+```bash
+python -m pip install https://github.com/etyvrox/enum_oblako
+```
+
+# Run
+
 Generate:
 ```
-$ python3 enum_oblako.py --generate --name <name> --rps 100
+python3 enum_oblako.py --generate --name <name> --rps 100
 ```
+
 Enum with prepared list (your namespaces and buckets files):
 ```
-$ python3 enum_oblako.py --namespaces namespaces.txt --buckets buckets.txt --name <test> --rps 100
+python3 enum_oblako.py --namespaces namespaces.txt --buckets buckets.txt --name <test> --rps 100
 ```
+
 Also it supports two regions: ru and eu (or all if you want both)
 ```
-$ python3 enum_oblako.py --generate --name <name> --region eu --rps 100
+python3 enum_oblako.py --generate --name <name> --region eu --rps 100
 ```
