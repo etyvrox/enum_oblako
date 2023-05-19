@@ -36,15 +36,15 @@ python -m pip install https://github.com/etyvrox/enum_oblako
 
 Generate:
 ```
-python3 enum_oblako.py --generate --name <name> --rps 100
+enum_oblako --generate --name <name> --rps 100
 ```
 
 Enum with prepared list (your namespaces and buckets files):
 ```
-python3 enum_oblako.py --namespaces namespaces.txt --buckets buckets.txt --name <test> --rps 100
+enum_oblako --namespaces namespaces.txt --buckets buckets.txt --name <test> --rps 100
 ```
 
 Also it supports two regions: ru and eu (or all if you want both)
 ```
-python3 enum_oblako.py --generate --name <name> --region eu --rps 100
+enum_oblako --generate --name <name> --region eu --rps 100
 ```
