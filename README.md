@@ -1,5 +1,9 @@
 # enum_oblako
 
+[![](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
+S3/SAAS enumerator
+
 # Enum S3 buckets and SaaS
 
 For now enum_oblako supports following services:
@@ -29,8 +33,10 @@ Enum_oblako can be run in two modes:
 # Install
 
 ```bash
-python -m pip install enum_oblako
+python -m pip install https://github.com/etyvrox/enum_oblako/releases/latest/download/enum-oblako.tar.gz
 ```
+
+:sleeping: pip is not supported yet
 
 # Run
 
