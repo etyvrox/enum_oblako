@@ -29,7 +29,7 @@ Enum_oblako can be run in two modes:
 # Install
 
 ```bash
-python -m pip install https://github.com/etyvrox/enum_oblako
+python -m pip install enum_oblako
 ```
 
 # Run

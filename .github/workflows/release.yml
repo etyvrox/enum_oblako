@@ -31,7 +31,11 @@ jobs:
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Build project for distribution
-        run: poetry build
+        run: |
+          poetry build
+          cd dist
+          mv *.tar.gz enum-oblako.tar.gz
+          mv *.whl enum_oblako-py3-none-any.whl
 
       - name: Check Version
         id: check-version
