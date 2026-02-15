@@ -111,7 +111,7 @@ def print_stats(name, namespaces, buckets, rps):
 
 
 async def get(client, queue):
-    failed_http_codes = [404, 434, 400]
+    failed_http_codes = [404, 434, 400, 429]
     while True:
         url = await queue.get()
         # print (' ' * 80, end='\r')
